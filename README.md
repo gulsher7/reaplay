@@ -2,55 +2,65 @@
 
 **An experimental macOS launcher for Windows games on Apple Silicon.**
 
-ReaPlay is an early-stage desktop app exploring how to manage game libraries, compatibility environments, and launch configuration for Windows games on macOS. It is not a compatibility guarantee: results depend on each game, macOS version, hardware, and available translation layers.
+The project will start with a small, runnable UI prototype and one carefully chosen test game. We will validate each layer before attempting larger or more demanding titles. ReaPlay is independent of Highball; it will not depend on Highball being installed.
 
-## Status
+## Current status
 
-🚧 **Prototype / scaffold stage.** This repository currently establishes the product direction and architecture. The compatibility backend is not implemented yet.
+- [x] Product scope and architecture notes
+- [x] Initial interactive React + TypeScript UI prototype
+- [ ] Run the UI locally and refine the flow
+- [ ] Add Tauri 2 and the native Rust backend
+- [ ] Detect host capabilities and installed compatibility tools
+- [ ] Import a lawfully obtained local game
+- [ ] Test a small game and record reproducible results
+- [ ] Expand compatibility only after the first test works
 
-## Goals
+**Important:** the current UI is a visual prototype. It does not install, configure, or launch Windows games yet.
 
-- A clean macOS-native-feeling game library and launcher.
-- Per-game launch configuration and compatibility profiles.
-- A modular backend for detecting installed tools and managing game environments.
-- Diagnostics that make launch failures easier to understand.
-- Clear reporting of requirements and known limitations.
+## Prototype stack
 
-## Planned stack
+- React 19
+- TypeScript
+- Vite
+- Lucide icons
 
-- **Tauri 2** for the desktop shell
-- **React + TypeScript + Vite** for the UI
-- **Rust** for local system integration
-- A pluggable compatibility-provider layer (future work)
+Tauri and Rust will be added after the UI flow is agreed, so we can separate UI iteration from platform integration.
 
-The frontend must never assume that a compatibility tool is installed or supported. Backend capability checks should be authoritative.
+## Run the prototype
 
-## Safety and scope
+Prerequisites: Node.js 22 or later and npm.
 
-ReaPlay is intended to launch games the user has lawfully obtained and installed. It will not implement DRM, license, or account-authentication bypasses. Users remain responsible for complying with game-store terms and applicable licenses. Compatibility components must be obtained from their official sources and used under their respective licenses.
+```bash
+npm install
+npm run dev
+```
 
-## Development
+Open the local URL printed by Vite. To check the production build:
 
-Prerequisites:
+```bash
+npm run build
+```
 
-- Node.js (current LTS recommended)
-- Rust toolchain
-- Tauri prerequisites for macOS
-- Xcode Command Line Tools
+## Initial test strategy
 
-Once the initial Tauri app scaffold is generated, install dependencies and start its development server using the scripts defined in `package.json`.
+1. Confirm the library UI works.
+2. Add a local game entry (currently session-only demo data).
+3. Implement safe executable-path validation and native diagnostics.
+4. Select a small, legally obtained Windows game with minimal launcher/DRM dependencies.
+5. Test startup, rendering, input, audio, exit behavior, and logs.
+6. Publish the exact macOS version, hardware, compatibility-layer version, and outcome.
 
-## Initial roadmap
+A game being listed in the UI does not mean it is compatible. Compatibility claims must be based on tests on real hardware.
 
-1. [x] Define product scope and modular architecture.
-2. [ ] Add Tauri + React + TypeScript application scaffold.
-3. [ ] Build the library and game-detail UI.
-4. [ ] Add a Rust capability/diagnostics API.
-5. [ ] Implement import of an existing local game executable.
-6. [ ] Add compatibility-provider discovery and per-game profiles.
-7. [ ] Add launch logs, validation, and diagnostics.
-8. [ ] Test with legally obtained games and document compatibility results.
+## Safety and licensing
+
+ReaPlay is for games the user has lawfully obtained. It will not bypass DRM, license checks, or store authentication. Compatibility components must come from official sources and be used according to their licenses.
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Roadmap](docs/ROADMAP.md)
 
 ## License
 
-No license has been selected yet. Until one is added, all rights are reserved by the copyright holder; do not assume the code is available for reuse.
+No license has been selected yet. Until one is added, all rights are reserved by the copyright holder.
