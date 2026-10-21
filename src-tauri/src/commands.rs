@@ -16,6 +16,7 @@ use crate::library::{self, LibraryFile};
 use crate::model::{Availability, Diagnostics, Game, GameEntry};
 use crate::paths;
 use crate::provider::{self, ProviderInfo};
+use crate::report;
 
 /// Emitted when a launched game exits, with the finished `LaunchRecord`.
 pub const LAUNCH_FINISHED_EVENT: &str = "reaplay://launch-finished";
@@ -195,6 +196,30 @@ pub fn get_diagnostics(app: AppHandle, state: State<AppState>) -> Result<Diagnos
         capabilities: crate::diagnostics::detect_capabilities(),
         library_path: state.library_path.display().to_string(),
     })
+}
+
+/// A redacted diagnostic report, safe to paste into a bug report.
+#[tauri::command]
+pub fn export_diagnostics(app: AppHandle, state: State<AppState>) -> Result<String, IpcError> {
+    export_diagnostics_inner(app.package_info().version.to_string(), &state)
+}
+
+pub fn export_diagnostics_inner(app_version: String, state: &AppState) -> Result<String, IpcError> {
+    let diagnostics = Diagnostics {
+        app_version,
+        os_version: crate::diagnostics::os_version(),
+        arch: crate::diagnostics::arch(),
+        capabilities: crate::diagnostics::detect_capabilities(),
+        library_path: state.library_path.display().to_string(),
+    };
+    let providers: Vec<ProviderInfo> = provider::all()
+        .into_iter()
+        .map(|provider| provider.info())
+        .collect();
+    let games = list_games_inner(state)?;
+    let launches = list_launches_inner(state)?;
+
+    Ok(report::build(&diagnostics, &providers, &games, &launches))
 }
 
 /// Compatibility providers and whether each is usable right now.

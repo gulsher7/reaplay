@@ -2,7 +2,7 @@
 
 The single boundary between the React UI and the Rust application layer.
 
-**Status: implemented through the launch pipeline.** The eight commands below
+**Status: implemented through the launch pipeline.** The nine commands below
 exist and are registered in `src-tauri/src/lib.rs`. The authority for each side is:
 
 - Rust: `src-tauri/src/commands.rs`, `model.rs`, `error.rs`
@@ -30,6 +30,7 @@ hand. Every type below is serialised as camelCase on the wire.
 | `remove_game` | `{ id: string }` | `void` |
 | `get_diagnostics` | — | `Diagnostics` |
 | `list_providers` | — | `ProviderInfo[]` |
+| `export_diagnostics` | — | `string` |
 | `launch_game` | `{ id: string }` | `LaunchRecord` |
 | `terminate_launch` | `{ launchId: string }` | `void` |
 | `list_launches` | — | `LaunchRecord[]` |
@@ -38,6 +39,10 @@ hand. Every type below is serialised as camelCase on the wire.
 
 `launch_game` returns as soon as the process is running, with a record whose
 `status` is `running`. The finished record arrives later on an event.
+
+`export_diagnostics` returns a plain-text report with home-directory paths
+replaced by `~`. It is assembled from host facts, detection results and launch
+metadata only; a test asserts the home directory never appears in the output.
 
 ## Events
 

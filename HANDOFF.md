@@ -41,6 +41,17 @@ on the host reports itself unavailable; nothing is ever downloaded or installed.
 - Launch history lives in its own `launches.json`, newest first, capped at 100.
   A record left `running` by a crash is shown as stopped, not as live.
 
+**Diagnostic export** (`src-tauri/src/report.rs`)
+
+A plain-text report for bug reports: host facts, detected tools, providers,
+library and recent launches. Home-directory paths become `~`, and a test
+asserts the home directory cannot appear in the output. Generate and copy it
+from Settings.
+
+**CI** — `.github/workflows/ci.yml` runs `cargo fmt --check`, clippy with
+`-D warnings`, the Rust tests and the frontend build on a macOS runner. It has
+never run on GitHub, so treat it as unproven until the first push.
+
 **UI** — a real Launch button (disabled, with the reason, when no provider is
 installed) and a Launch logs view showing exactly what was executed, the exit
 code, and the captured output.
@@ -48,13 +59,13 @@ code, and the captured output.
 ## Test results — all actually run
 
 ```
-cargo test --lib                            47 passed, 0 failed
+cargo test --lib                            51 passed, 0 failed
 cargo clippy --all-targets -- -D warnings   clean
 cargo fmt                                   applied
 npm run build (tsc -b && vite build)        pass, exit 0
 ```
 
-The 47 include end-to-end tests that drive the real command logic against
+The 51 include end-to-end tests that drive the real command logic against
 temporary files: import → list → remove, import deduplication, persistence
 across a restart, a game whose file vanished, and every launch refusal path.
 
@@ -119,9 +130,11 @@ enough — an itch.io freeware title avoids both the cost and the DRM question.
 
 ## Known gaps
 
-- No CI workflow; lint, test and build are local only.
 - Per-game provider profiles are not implemented (Phase 2 remainder).
-- Diagnostic export is not implemented (Phase 3 remainder).
+- The CI workflow is written but has never executed; the first push will be
+  its first real test.
+- The CI YAML could not be machine-validated locally (no YAML parser on this
+  machine), only checked structurally.
 
 ## Next recommended action
 

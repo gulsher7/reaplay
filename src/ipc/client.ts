@@ -72,3 +72,6 @@ export async function onLaunchFinished(
   );
   return unlisten;
 }
+
+/** A redacted diagnostic report, safe to paste into a bug report. */
+export const exportDiagnostics = (): Promise<string> => call<string>('export_diagnostics');

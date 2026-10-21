@@ -232,3 +232,17 @@ button:focus-visible, input:focus-visible, .game-card-hit:focus-visible {
   .launch-head { flex-wrap: wrap; }
   .launch-main { flex-basis: 100%; }
 }
+
+/* ── Diagnostic report ─────────────────────────────────────────────────── */
+
+.settings-subsection { margin-top: 34px; }
+.report-actions { display: flex; justify-content: flex-end; margin: 16px 0 8px; }
+.report-body {
+  width: 100%; resize: vertical;
+  border: 1px solid #262a35; border-radius: 9px;
+  background: #0e1016; color: #c3c7d3;
+  padding: 13px 15px;
+  font: 10.5px/1.7 'DM Mono', monospace;
+  outline: none;
+}
+.report-body:focus-visible { border-color: #9a82f3; }

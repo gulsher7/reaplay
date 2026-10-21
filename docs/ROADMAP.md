@@ -8,8 +8,10 @@ macOS 26.6.2, not from what is believed to work.
 - [x] Product scope and safety boundaries
 - [x] High-level architecture
 - [x] Establish Tauri 2 + React + TypeScript scaffold
-- [~] Add formatting, linting, and CI — `cargo fmt` and `cargo clippy -D warnings`
-      and `tsc -b` all run clean locally; no CI workflow exists yet
+- [x] Add formatting, linting, and CI — `.github/workflows/ci.yml` runs
+      `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` and the
+      frontend build on a macOS runner. The workflow has not yet run on
+      GitHub, so it is unproven until the first push.
 
 ## Phase 1 — Read-only prototype
 
@@ -45,7 +47,9 @@ with `PROVIDER_UNAVAILABLE` rather than failing obscurely.
 - [x] Capture process exit status and logs — stdout/stderr drained on their own
       threads, bounded to 16 KiB each
 - [x] Display launch history — `launches.json`, newest first, capped at 100
-- [ ] Provide a diagnostic export that excludes secrets and personal data by default
+- [x] Provide a diagnostic export that excludes secrets and personal data by
+      default — home paths become `~`, and a test asserts the home directory
+      cannot appear in the output
 
 Also implemented: terminating a running game, and marking a record that was
 left `running` by a crash as stopped rather than showing it as live.

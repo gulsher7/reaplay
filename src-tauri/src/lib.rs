@@ -7,6 +7,7 @@ mod library;
 mod model;
 mod paths;
 mod provider;
+mod report;
 mod store;
 
 use std::path::PathBuf;
@@ -51,6 +52,7 @@ pub fn run() {
             commands::remove_game,
             commands::get_diagnostics,
             commands::list_providers,
+            commands::export_diagnostics,
             commands::launch_game,
             commands::terminate_launch,
             commands::list_launches,

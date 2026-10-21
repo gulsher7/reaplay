@@ -123,6 +123,7 @@ export default function App() {
               status={diagnosticsStatus}
               error={diagnostics.error}
               onRefresh={() => void diagnostics.refresh()}
+              backendAvailable={backend}
             />
           )}
         </div>
