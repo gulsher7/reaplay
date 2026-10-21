@@ -2,8 +2,8 @@
 
 The single boundary between the React UI and the Rust application layer.
 
-**Status: implemented for Phase 1.** The four commands below exist and are
-registered in `src-tauri/src/lib.rs`. The authority for each side is:
+**Status: implemented through the launch pipeline.** The eight commands below
+exist and are registered in `src-tauri/src/lib.rs`. The authority for each side is:
 
 - Rust: `src-tauri/src/commands.rs`, `model.rs`, `error.rs`
 - TypeScript: `src/ipc/types.ts`, `src/ipc/client.ts`
@@ -29,8 +29,23 @@ hand. Every type below is serialised as camelCase on the wire.
 | `import_game` | `{ request: ImportGameRequest }` | `GameEntry` |
 | `remove_game` | `{ id: string }` | `void` |
 | `get_diagnostics` | — | `Diagnostics` |
+| `list_providers` | — | `ProviderInfo[]` |
+| `launch_game` | `{ id: string }` | `LaunchRecord` |
+| `terminate_launch` | `{ launchId: string }` | `void` |
+| `list_launches` | — | `LaunchRecord[]` |
 
 `remove_game` forgets metadata only; it never deletes game files.
+
+`launch_game` returns as soon as the process is running, with a record whose
+`status` is `running`. The finished record arrives later on an event.
+
+## Events
+
+| Event | Payload |
+|---|---|
+| `reaplay://launch-finished` | `LaunchRecord` |
+
+Emitted once per launch, after the outcome has been written to history.
 
 ## Error shape
 
@@ -49,6 +64,9 @@ Codes are declared once in `src-tauri/src/error.rs` (`mod code`) and mirrored in
 `PATH_UNREADABLE`, `VOLUME_UNAVAILABLE`, `GAME_NOT_FOUND`,
 `GAME_ALREADY_IMPORTED`, `STORE_UNREADABLE`, `STORE_UNWRITABLE`,
 `STORE_CORRUPT`, `INTERNAL`.
+
+Launch-related codes: `PROVIDER_UNAVAILABLE`, `PROVIDER_NOT_FOUND`,
+`GAME_UNAVAILABLE`, `LAUNCH_FAILED`, `LAUNCH_NOT_RUNNING`.
 
 `BACKEND_UNAVAILABLE` is raised by the TypeScript client, not by Rust, when the
 page is running without a Tauri host.
@@ -92,6 +110,32 @@ type ImportGameRequest = {
   executablePath: string;
   title?: string;              // omit to derive one from the file name
 };
+
+type ProviderInfo = {
+  id: string;
+  displayName: string;
+  available: boolean;
+  runtimePath?: string;        // the runtime binary, when one was found
+  detail?: string;
+};
+
+type LaunchStatus = 'running' | 'exited' | 'failed' | 'terminated';
+
+type LaunchRecord = {
+  id: string;
+  gameId: string;
+  gameTitle: string;
+  providerId: string;
+  program: string;             // exactly what was executed
+  args: string[];              // an array, never a command string
+  startedAt: string;
+  finishedAt?: string;
+  status: LaunchStatus;
+  exitCode?: number;
+  stdoutTail?: string;         // bounded to 16 KiB
+  stderrTail?: string;
+  error?: string;
+};
 ```
 
 ## Resolved decisions
@@ -124,8 +168,23 @@ by the Re-check button.
 macOS volume usually has no POSIX execute bit, so requiring one would reject
 almost every real input. Validation requires a readable regular file.
 
+**Where launch history lives.** Its own `launches.json`, not the library file.
+A launch is an event and a game is a record; mixing them would mean rewriting
+the whole library on every process exit. History is capped at 100 entries,
+newest first. Unlike the library, a damaged history file is discarded rather
+than quarantined — it is troubleshooting data, not user data.
+
+**How games are launched.** `Command` with an explicit program path and an
+argument array. No shell is involved, so a path containing spaces, quotes or
+semicolons is data rather than syntax; there is a test asserting that a
+shell-metacharacter argument is not interpreted. The process runs with its
+install directory as the working directory, and its output is drained on
+dedicated threads because a child that fills its stdout pipe while nothing
+reads it would block forever.
+
 ## Still open
 
 - [ ] Whether `providerId` / `profileId` stay on `Game` or move to a separate
       per-game profile record (Phase 4 decides this).
-- [ ] Whether launch history is a separate store or part of the library file.
+- [ ] Whether a provider needs a per-game prefix/bottle concept, and whether
+      that belongs in this contract or behind the provider interface.

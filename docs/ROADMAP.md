@@ -20,24 +20,40 @@ macOS 26.6.2, not from what is believed to work.
 - [x] Rust capability and diagnostics commands
 - [x] Friendly errors and logs
 
-Phase 1 is functionally complete but has not been exercised by hand in the
-running window — see "Verified" and "Not yet verified" in `HANDOFF.md`.
+Phase 1 is complete. The import, list and remove paths are covered by tests
+that drive the real command logic against temporary files.
 
 ## Phase 2 — Provider abstraction
 
-- [ ] Provider interface and capability model
-- [ ] Detect supported compatibility tools without changing the host system
-      (partial: Rosetta 2, Wine and Game Porting Toolkit are detected today,
-      but behind ad-hoc checks rather than a provider interface)
+- [x] Provider interface and capability model (`src-tauri/src/provider.rs`)
+- [x] Detect supported compatibility tools without changing the host system —
+      Rosetta 2, Wine, CrossOver and Game Porting Toolkit, by file checks only;
+      no third-party binary is executed to interrogate it
 - [ ] Per-game profile metadata
-- [ ] Validate provider configuration before launch
+- [x] Validate provider configuration before launch — a launch resolves a
+      provider and re-checks the game's files before any process is spawned
+
+Only one provider (Wine) is implemented. **No Wine runtime is installed on this
+machine**, so the provider reports itself unavailable and launching is refused
+with `PROVIDER_UNAVAILABLE` rather than failing obscurely.
 
 ## Phase 3 — Launch and observability
 
-- [ ] Launch using explicit executable + argument arrays
-- [ ] Capture process exit status and logs
-- [ ] Display launch history
+- [x] Launch using explicit executable + argument arrays — no shell at any
+      point, asserted by a test that a shell-metacharacter argument is not
+      interpreted
+- [x] Capture process exit status and logs — stdout/stderr drained on their own
+      threads, bounded to 16 KiB each
+- [x] Display launch history — `launches.json`, newest first, capped at 100
 - [ ] Provide a diagnostic export that excludes secrets and personal data by default
+
+Also implemented: terminating a running game, and marking a record that was
+left `running` by a crash as stopped rather than showing it as live.
+
+The pipeline is verified against real processes (`/bin/echo`, `/bin/sleep`),
+including spawn, argument handling, exit codes, output capture and termination.
+It has **not** been verified against a real Windows game, because no
+compatibility runtime is installed.
 
 ## Phase 4 — Compatibility verification
 

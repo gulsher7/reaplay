@@ -18,7 +18,7 @@ const PRIMARY: NavEntry[] = [
 
 const SECONDARY: NavEntry[] = [
   { id: 'environments', label: 'Environments', icon: Boxes, planned: true },
-  { id: 'launches', label: 'Launch logs', icon: ScrollText, planned: true },
+  { id: 'launches', label: 'Launch logs', icon: ScrollText },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 

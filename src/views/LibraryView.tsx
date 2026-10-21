@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FolderPlus, Plus, Search } from 'lucide-react';
+import { FolderPlus, Play, Plus, Search } from 'lucide-react';
 
 import { ErrorNotice } from '../components/ErrorNotice';
 import { GameCard } from '../components/GameCard';
@@ -14,6 +14,11 @@ type Props = {
   onRetry: () => void;
   onImport: (request: ImportGameRequest) => Promise<IpcError | null>;
   onRemove: (id: string) => Promise<IpcError | null>;
+  onLaunch: (gameId: string) => Promise<IpcError | null>;
+  /** False when no compatibility provider is installed. */
+  canLaunch: boolean;
+  /** Why launching is unavailable, when it is. */
+  launchBlockedReason?: string;
 };
 
 export function LibraryView({
@@ -24,11 +29,16 @@ export function LibraryView({
   onRetry,
   onImport,
   onRemove,
+  onLaunch,
+  canLaunch,
+  launchBlockedReason,
 }: Props) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [removeError, setRemoveError] = useState<IpcError | null>(null);
+  const [launchError, setLaunchError] = useState<IpcError | null>(null);
+  const [launching, setLaunching] = useState(false);
 
   const filtered = useMemo(
     () => games.filter((game) => game.title.toLowerCase().includes(query.trim().toLowerCase())),
@@ -89,6 +99,7 @@ export function LibraryView({
       )}
 
       {removeError && <ErrorNotice error={removeError} />}
+      {launchError && <ErrorNotice error={launchError} />}
 
       {games.length === 0 ? (
         <div className="empty-library">
@@ -163,11 +174,21 @@ export function LibraryView({
             </button>
             <button
               className="launch-button"
-              disabled
-              aria-disabled="true"
-              title="Launching is not implemented yet"
+              disabled={!canLaunch || selected.availability !== 'available' || launching}
+              title={
+                !canLaunch
+                  ? launchBlockedReason ?? 'No compatibility provider is installed'
+                  : selected.availability !== 'available'
+                    ? 'This game\u2019s files are not reachable'
+                    : undefined
+              }
+              onClick={async () => {
+                setLaunching(true);
+                setLaunchError(await onLaunch(selected.id));
+                setLaunching(false);
+              }}
             >
-              Launch — planned
+              <Play size={14} /> {launching ? 'Starting\u2026' : 'Launch'}
             </button>
           </div>
         </section>

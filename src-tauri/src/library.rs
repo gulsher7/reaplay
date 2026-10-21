@@ -6,7 +6,6 @@
 //! half-written one.
 
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -72,57 +71,11 @@ pub fn load(path: &Path) -> Result<LibraryFile, IpcError> {
     }
 }
 
-/// Write the library atomically: temp file in the same directory, then rename.
+/// Write the library atomically. See `store::atomic_write` for the guarantee.
 pub fn save(path: &Path, file: &LibraryFile) -> Result<(), IpcError> {
-    let parent = path.parent().ok_or_else(|| {
-        IpcError::internal(format!("library path has no parent: {}", path.display()))
-    })?;
-    fs::create_dir_all(parent).map_err(|e| {
-        IpcError::detailed(
-            code::STORE_UNWRITABLE,
-            "ReaPlay could not create its data folder.",
-            e.to_string(),
-        )
-    })?;
-
     let body = serde_json::to_vec_pretty(file)
         .map_err(|e| IpcError::internal(format!("serialising library: {e}")))?;
-
-    let temp = path.with_extension("json.tmp");
-    {
-        let mut handle = fs::File::create(&temp).map_err(|e| {
-            IpcError::detailed(
-                code::STORE_UNWRITABLE,
-                "ReaPlay could not save your game library.",
-                e.to_string(),
-            )
-        })?;
-        handle.write_all(&body).map_err(|e| {
-            IpcError::detailed(
-                code::STORE_UNWRITABLE,
-                "ReaPlay could not save your game library.",
-                e.to_string(),
-            )
-        })?;
-        // Flush to disk before the rename, so the rename cannot expose a
-        // file whose contents have not landed yet.
-        handle.sync_all().map_err(|e| {
-            IpcError::detailed(
-                code::STORE_UNWRITABLE,
-                "ReaPlay could not save your game library.",
-                e.to_string(),
-            )
-        })?;
-    }
-
-    fs::rename(&temp, path).map_err(|e| {
-        let _ = fs::remove_file(&temp);
-        IpcError::detailed(
-            code::STORE_UNWRITABLE,
-            "ReaPlay could not save your game library.",
-            e.to_string(),
-        )
-    })
+    crate::store::atomic_write(path, &body, "game library")
 }
 
 /// Move a damaged library file aside so it is preserved but out of the way.

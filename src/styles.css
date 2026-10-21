@@ -182,3 +182,53 @@ button:focus-visible, input:focus-visible, .game-card-hit:focus-visible {
   .card-remove { opacity: 1; }
   .capability-row { align-items: flex-start; }
 }
+
+/* ── Launch logs ───────────────────────────────────────────────────────── */
+
+.launch-list { list-style: none; margin: 22px 0 0; padding: 0; display: grid; gap: 9px; }
+.launch-row {
+  border: 1px solid #262a35; border-radius: 9px; background: #11141b;
+}
+.launch-head {
+  display: flex; align-items: center; gap: 12px; padding: 13px 15px;
+}
+.launch-main { flex: 1; min-width: 0; }
+.launch-main strong { display: block; font-size: 12.5px; color: #e4e6ef; }
+.launch-meta {
+  display: block; margin-top: 4px;
+  font: 10px 'DM Mono', monospace; color: #828899; overflow-wrap: anywhere;
+}
+.launch-status {
+  flex-shrink: 0;
+  font: 9.5px 'DM Mono', monospace; letter-spacing: .9px;
+  border-radius: 5px; padding: 4px 7px;
+}
+.launch-status.running { color: #9fc9ff; background: #16212e; border: 1px solid #2c415c; }
+.launch-status.exited  { color: #85dcb4; background: #19291f; border: 1px solid #2e4738; }
+.launch-status.failed  { color: #ef9a94; background: #2b1d1d; border: 1px solid #4a3030; }
+.launch-status.stopped { color: #c3b07f; background: #262115; border: 1px solid #45402c; }
+
+.launch-detail { padding: 0 15px 15px; border-top: 1px solid #1d2029; }
+.launch-facts { display: grid; gap: 11px; margin: 14px 0; }
+.launch-facts dt {
+  font: 500 9.5px 'DM Mono', monospace; letter-spacing: 1.2px;
+  color: #727989; margin-bottom: 6px;
+}
+.launch-facts dd { margin: 0; font-size: 11px; color: #c3c7d3; overflow-wrap: anywhere; }
+.arg-chip {
+  display: inline-block; margin: 0 5px 5px 0; padding: 3px 7px;
+  font: 10px 'DM Mono', monospace; color: #cbb9ff;
+  background: #1d1a29; border: 1px solid #343143; border-radius: 5px;
+  overflow-wrap: anywhere;
+}
+.launch-stream-label {
+  display: block; margin: 12px 0 6px;
+  font: 500 9.5px 'DM Mono', monospace; letter-spacing: 1.2px; color: #727989;
+}
+.launch-error { margin: 10px 0 0; font-size: 11.5px; color: #ef9a94; }
+.launch-no-output { margin: 10px 0 0; font-size: 11px; color: #777e8e; }
+
+@media (max-width: 700px) {
+  .launch-head { flex-wrap: wrap; }
+  .launch-main { flex-basis: 100%; }
+}

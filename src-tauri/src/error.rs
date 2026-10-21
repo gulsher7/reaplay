@@ -20,6 +20,11 @@ pub mod code {
     pub const STORE_UNREADABLE: &str = "STORE_UNREADABLE";
     pub const STORE_UNWRITABLE: &str = "STORE_UNWRITABLE";
     pub const STORE_CORRUPT: &str = "STORE_CORRUPT";
+    pub const PROVIDER_UNAVAILABLE: &str = "PROVIDER_UNAVAILABLE";
+    pub const PROVIDER_NOT_FOUND: &str = "PROVIDER_NOT_FOUND";
+    pub const GAME_UNAVAILABLE: &str = "GAME_UNAVAILABLE";
+    pub const LAUNCH_FAILED: &str = "LAUNCH_FAILED";
+    pub const LAUNCH_NOT_RUNNING: &str = "LAUNCH_NOT_RUNNING";
     pub const INTERNAL: &str = "INTERNAL";
 }
 

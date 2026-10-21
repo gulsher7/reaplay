@@ -19,6 +19,11 @@ export type IpcErrorCode =
   | 'STORE_UNREADABLE'
   | 'STORE_UNWRITABLE'
   | 'STORE_CORRUPT'
+  | 'PROVIDER_UNAVAILABLE'
+  | 'PROVIDER_NOT_FOUND'
+  | 'GAME_UNAVAILABLE'
+  | 'LAUNCH_FAILED'
+  | 'LAUNCH_NOT_RUNNING'
   | 'INTERNAL'
   /** Raised by the client, not the backend: there is no Tauri host present. */
   | 'BACKEND_UNAVAILABLE';
@@ -67,4 +72,33 @@ export type ImportGameRequest = {
   executablePath: string;
   /** Omit to let the backend derive one from the file name. */
   title?: string;
+};
+
+export type ProviderInfo = {
+  id: string;
+  displayName: string;
+  available: boolean;
+  /** Absolute path to the runtime binary, when one was found. */
+  runtimePath?: string;
+  /** Why it is unavailable, when it is. */
+  detail?: string;
+};
+
+export type LaunchStatus = 'running' | 'exited' | 'failed' | 'terminated';
+
+export type LaunchRecord = {
+  id: string;
+  gameId: string;
+  gameTitle: string;
+  providerId: string;
+  /** Exactly what was executed, recorded for reproducibility. */
+  program: string;
+  args: string[];
+  startedAt: string;
+  finishedAt?: string;
+  status: LaunchStatus;
+  exitCode?: number;
+  stdoutTail?: string;
+  stderrTail?: string;
+  error?: string;
 };

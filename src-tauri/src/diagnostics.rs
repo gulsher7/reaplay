@@ -33,6 +33,7 @@ pub fn detect_capabilities() -> Vec<Capability> {
     vec![
         detect_rosetta(),
         detect_wine(),
+        detect_crossover(),
         detect_game_porting_toolkit(),
     ]
 }
@@ -55,15 +56,35 @@ fn detect_rosetta() -> Capability {
     }
 }
 
-fn detect_wine() -> Capability {
-    let found = first_existing(&[
+/// Where a Wine runtime actually lives on macOS.
+///
+/// Wine is rarely on `PATH` here: the WineHQ casks install an `.app` bundle and
+/// wrappers ship their own engine, so bundle layouts matter more than `$PATH`.
+/// Shared with `provider.rs` so detection and launching cannot disagree about
+/// which binary is "the" runtime.
+pub fn find_wine_runtime() -> Option<PathBuf> {
+    first_existing(&[
         "/opt/homebrew/bin/wine64",
         "/opt/homebrew/bin/wine",
         "/usr/local/bin/wine64",
         "/usr/local/bin/wine",
+        "/Applications/Wine Stable.app/Contents/Resources/wine/bin/wine",
+        "/Applications/Wine Staging.app/Contents/Resources/wine/bin/wine",
+        "/Applications/Wine Devel.app/Contents/Resources/wine/bin/wine",
+        "/Applications/Sikarugir.app/Contents/Resources/wine/bin/wine",
+        "/Applications/Sikarugir.app/Contents/SharedSupport/wine/bin/wine",
+        // The Game Porting Toolkit cask installs a Wine here and symlinks
+        // wine64 into the Homebrew prefix.
+        "/Applications/Game Porting Toolkit.app/Contents/Resources/wine/bin/wine64",
+        "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine64",
+        "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine",
     ])
     .or_else(|| find_on_path("wine64"))
-    .or_else(|| find_on_path("wine"));
+    .or_else(|| find_on_path("wine"))
+}
+
+fn detect_wine() -> Capability {
+    let found = find_wine_runtime();
 
     Capability {
         id: "wine".into(),
@@ -72,7 +93,29 @@ fn detect_wine() -> Capability {
         version: None,
         detail: match &found {
             Some(path) => Some(path.display().to_string()),
-            None => Some("Not detected. ReaPlay does not install it for you.".into()),
+            None => Some(
+                "Not detected. The Homebrew wine casks are disabled upstream, so \
+                 Wine must come from another source."
+                    .into(),
+            ),
+        },
+    }
+}
+
+fn detect_crossover() -> Capability {
+    let found = first_existing(&[
+        "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine",
+        "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wineloader",
+    ]);
+
+    Capability {
+        id: "crossover".into(),
+        display_name: "CrossOver".into(),
+        available: found.is_some(),
+        version: None,
+        detail: match &found {
+            Some(path) => Some(path.display().to_string()),
+            None => Some("Not detected. CrossOver is a commercial product.".into()),
         },
     }
 }
@@ -81,6 +124,7 @@ fn detect_game_porting_toolkit() -> Capability {
     let found = first_existing(&[
         "/opt/homebrew/bin/gameportingtoolkit",
         "/usr/local/bin/gameportingtoolkit",
+        "/Applications/Game Porting Toolkit.app/Contents/Resources/wine/bin/wine64",
     ])
     .or_else(|| find_on_path("gameportingtoolkit"));
 
