@@ -25,3 +25,7 @@ src-tauri/gen/
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
+
+# two-agent collaboration scratch
+collab/outbox/
+collab/inbox/
