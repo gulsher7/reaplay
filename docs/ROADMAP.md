@@ -1,25 +1,34 @@
 # Roadmap
 
+Status is recorded from what has actually been run on an M4 MacBook running
+macOS 26.6.2, not from what is believed to work.
+
 ## Phase 0 — Repository foundation
 
 - [x] Product scope and safety boundaries
 - [x] High-level architecture
-- [ ] Establish Tauri 2 + React + TypeScript scaffold
-- [ ] Add formatting, linting, and CI
+- [x] Establish Tauri 2 + React + TypeScript scaffold
+- [~] Add formatting, linting, and CI — `cargo fmt` and `cargo clippy -D warnings`
+      and `tsc -b` all run clean locally; no CI workflow exists yet
 
 ## Phase 1 — Read-only prototype
 
-- [ ] App shell and navigation
-- [ ] Empty library state
-- [ ] Add/import a local game executable
-- [ ] Persist metadata locally
-- [ ] Rust capability and diagnostics commands
-- [ ] Friendly errors and logs
+- [x] App shell and navigation
+- [x] Empty library state
+- [x] Add/import a local game executable
+- [x] Persist metadata locally
+- [x] Rust capability and diagnostics commands
+- [x] Friendly errors and logs
+
+Phase 1 is functionally complete but has not been exercised by hand in the
+running window — see "Verified" and "Not yet verified" in `HANDOFF.md`.
 
 ## Phase 2 — Provider abstraction
 
 - [ ] Provider interface and capability model
 - [ ] Detect supported compatibility tools without changing the host system
+      (partial: Rosetta 2, Wine and Game Porting Toolkit are detected today,
+      but behind ad-hoc checks rather than a provider interface)
 - [ ] Per-game profile metadata
 - [ ] Validate provider configuration before launch
 
@@ -36,4 +45,5 @@
 - [ ] Publish reproducible results per game and provider version
 - [ ] Document unsupported features and known issues
 
-Scope note: supporting a game is an empirical result, not a promise based on its name or store listing.
+Scope note: supporting a game is an empirical result, not a promise based on its
+name or store listing.

@@ -8,44 +8,55 @@ The project will start with a small, runnable UI prototype and one carefully cho
 
 - [x] Product scope and architecture notes
 - [x] Initial interactive React + TypeScript UI prototype
-- [ ] Run the UI locally and refine the flow
-- [ ] Add Tauri 2 and the native Rust backend
-- [ ] Detect host capabilities and installed compatibility tools
-- [ ] Import a lawfully obtained local game
+- [x] Run the UI locally and refine the flow
+- [x] Add Tauri 2 and the native Rust backend
+- [x] Detect host capabilities and installed compatibility tools
+- [x] Import a lawfully obtained local game (implemented; not yet exercised by hand)
 - [ ] Test a small game and record reproducible results
 - [ ] Expand compatibility only after the first test works
 
-**Important:** the current UI is a visual prototype. It does not install, configure, or launch Windows games yet.
+**Important:** ReaPlay cannot launch a Windows game yet. It manages a library of
+local executables and reports what compatibility tooling this Mac has. The
+compatibility provider layer does not exist. Anything not implemented is
+labelled *Planned* in the interface rather than stubbed with a dead control.
 
 ## Prototype stack
 
-- React 19
-- TypeScript
-- Vite
+- Tauri 2 (desktop shell)
+- React 19 + TypeScript + Vite (UI)
+- Rust (local system integration)
 - Lucide icons
 
-Tauri and Rust will be added after the UI flow is agreed, so we can separate UI iteration from platform integration.
+The UI and the Rust layer meet only at the Tauri command surface, which is
+documented in [`docs/IPC_CONTRACT.md`](docs/IPC_CONTRACT.md).
 
-## Run the prototype
+## Run it
 
-Prerequisites: Node.js 22 or later and npm.
+Prerequisites: Node.js 22 or later, npm, a Rust toolchain (`rustup`), and Xcode
+Command Line Tools.
 
 ```bash
 npm install
-npm run dev
+npm run tauri dev     # the desktop app — this is what you want
 ```
 
-Open the local URL printed by Vite. To check the production build:
+`npm run dev` serves the UI in a browser, but the Rust backend is absent there,
+so the library and compatibility checks cannot work. The app says so plainly
+rather than showing an empty library that looks real.
+
+Checks:
 
 ```bash
-npm run build
+npm run build                                              # tsc -b && vite build
+cd src-tauri && cargo test --lib                           # unit tests
+cd src-tauri && cargo clippy --all-targets -- -D warnings  # lints
 ```
 
 ## Initial test strategy
 
 1. Confirm the library UI works.
-2. Add a local game entry (currently session-only demo data).
-3. Implement safe executable-path validation and native diagnostics.
+2. Add a local game entry (persisted to disk, validated by the Rust layer).
+3. Implement safe executable-path validation and native diagnostics. ✓
 4. Select a small, legally obtained Windows game with minimal launcher/DRM dependencies.
 5. Test startup, rendering, input, audio, exit behavior, and logs.
 6. Publish the exact macOS version, hardware, compatibility-layer version, and outcome.
