@@ -62,6 +62,11 @@ fn detect_rosetta() -> Capability {
 /// wrappers ship their own engine, so bundle layouts matter more than `$PATH`.
 /// Shared with `provider.rs` so detection and launching cannot disagree about
 /// which binary is "the" runtime.
+///
+/// CrossOver is deliberately **not** searched here. Its `wine` is a Perl
+/// wrapper that requires `--bottle` and rejects a bare executable path, so
+/// treating it as stock Wine would build a command that cannot run.
+/// `find_crossover_runtime` and `CrossOverProvider` own it instead.
 pub fn find_wine_runtime() -> Option<PathBuf> {
     first_existing(&[
         "/opt/homebrew/bin/wine64",
@@ -76,8 +81,6 @@ pub fn find_wine_runtime() -> Option<PathBuf> {
         // The Game Porting Toolkit cask installs a Wine here and symlinks
         // wine64 into the Homebrew prefix.
         "/Applications/Game Porting Toolkit.app/Contents/Resources/wine/bin/wine64",
-        "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine64",
-        "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine",
     ])
     .or_else(|| find_on_path("wine64"))
     .or_else(|| find_on_path("wine"))
@@ -102,20 +105,50 @@ fn detect_wine() -> Capability {
     }
 }
 
+/// CrossOver's bottle-aware `wine` wrapper.
+pub fn find_crossover_runtime() -> Option<PathBuf> {
+    first_existing(&["/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine"])
+}
+
+/// Bottles are per-user Windows environments. A launch needs one, so an
+/// installed CrossOver with no bottles is still not launch-ready.
+pub fn crossover_bottles() -> Vec<String> {
+    let Some(home) = std::env::var_os("HOME") else {
+        return Vec::new();
+    };
+    let root = PathBuf::from(home).join("Library/Application Support/CrossOver/Bottles");
+    let Ok(entries) = std::fs::read_dir(&root) else {
+        return Vec::new();
+    };
+    let mut bottles: Vec<String> = entries
+        .flatten()
+        // A bottle is a directory holding a `drive_c`; anything else in here
+        // is not something we can launch into.
+        .filter(|entry| entry.path().join("drive_c").is_dir())
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .collect();
+    // Stable order, so the chosen bottle does not change between runs.
+    bottles.sort();
+    bottles
+}
+
 fn detect_crossover() -> Capability {
-    let found = first_existing(&[
-        "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine",
-        "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wineloader",
-    ]);
+    let found = find_crossover_runtime();
+    let bottles = crossover_bottles();
 
     Capability {
         id: "crossover".into(),
         display_name: "CrossOver".into(),
-        available: found.is_some(),
+        // Installed but bottle-less is reported as unavailable on purpose:
+        // it cannot actually run a game yet.
+        available: found.is_some() && !bottles.is_empty(),
         version: None,
-        detail: match &found {
-            Some(path) => Some(path.display().to_string()),
-            None => Some("Not detected. CrossOver is a commercial product.".into()),
+        detail: match (&found, bottles.is_empty()) {
+            (Some(path), false) => Some(format!("{} ({})", path.display(), bottles.join(", "))),
+            (Some(_), true) => {
+                Some("Installed, but it has no bottles yet. Create one in CrossOver.".into())
+            }
+            (None, _) => Some("Not detected. CrossOver is a commercial product.".into()),
         },
     }
 }

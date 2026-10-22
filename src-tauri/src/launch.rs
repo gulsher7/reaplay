@@ -70,10 +70,28 @@ pub struct Outcome {
     pub stderr_tail: String,
 }
 
+/// How to stop a launch when killing the spawned process is not enough.
+///
+/// Wine puts every Windows process in its own process group and reparents it
+/// to init, so the game is not a child of what ReaPlay spawned and does not
+/// die with it. A provider that has this problem supplies the command that
+/// does work.
+#[derive(Debug, Clone)]
+pub struct StopCommand {
+    pub program: PathBuf,
+    pub args: Vec<String>,
+    pub env: Vec<(String, String)>,
+}
+
+struct Tracked {
+    child: Child,
+    stop: Option<StopCommand>,
+}
+
 /// Processes ReaPlay started and has not yet reaped.
 #[derive(Default)]
 pub struct Registry {
-    running: Mutex<HashMap<String, Child>>,
+    running: Mutex<HashMap<String, Tracked>>,
 }
 
 impl Registry {
@@ -81,12 +99,12 @@ impl Registry {
         Self::default()
     }
 
-    fn insert(&self, id: String, child: Child) -> Result<(), IpcError> {
-        self.lock()?.insert(id, child);
+    fn insert(&self, id: String, child: Child, stop: Option<StopCommand>) -> Result<(), IpcError> {
+        self.lock()?.insert(id, Tracked { child, stop });
         Ok(())
     }
 
-    fn lock(&self) -> Result<std::sync::MutexGuard<'_, HashMap<String, Child>>, IpcError> {
+    fn lock(&self) -> Result<std::sync::MutexGuard<'_, HashMap<String, Tracked>>, IpcError> {
         self.running
             .lock()
             .map_err(|_| IpcError::internal("launch registry lock poisoned"))
@@ -108,22 +126,68 @@ impl Registry {
     /// Ask a running game to stop. Returns `LAUNCH_NOT_RUNNING` if it already
     /// exited, which is not an error the user needs to see as a failure.
     pub fn terminate(&self, id: &str) -> Result<(), IpcError> {
-        let mut map = self.lock()?;
-        let child = map.get_mut(id).ok_or_else(|| {
-            IpcError::detailed(
-                code::LAUNCH_NOT_RUNNING,
-                "That game is not running.",
-                id.to_string(),
-            )
-        })?;
-        child.kill().map_err(|e| {
-            IpcError::detailed(
-                code::LAUNCH_FAILED,
-                "ReaPlay could not stop that game.",
-                e.to_string(),
-            )
-        })
+        let stop = {
+            let mut map = self.lock()?;
+            let tracked = map.get_mut(id).ok_or_else(|| {
+                IpcError::detailed(
+                    code::LAUNCH_NOT_RUNNING,
+                    "That game is not running.",
+                    id.to_string(),
+                )
+            })?;
+            tracked.child.kill().map_err(|e| {
+                IpcError::detailed(
+                    code::LAUNCH_FAILED,
+                    "ReaPlay could not stop that game.",
+                    e.to_string(),
+                )
+            })?;
+            tracked.stop.clone()
+        };
+
+        // Killing the spawned process is not enough for Wine-based providers:
+        // the game itself has been reparented away and survives. Run the
+        // provider's own shutdown command, with the registry lock released so
+        // the polling thread can still observe the exit.
+        if let Some(stop) = stop {
+            run_stop_command(&stop)?;
+        }
+        Ok(())
     }
+}
+
+/// Run a provider's shutdown command and wait for it.
+///
+/// A failure here is reported rather than swallowed: if it did not work, the
+/// game is probably still running, and saying otherwise would be a lie.
+fn run_stop_command(stop: &StopCommand) -> Result<(), IpcError> {
+    let mut command = Command::new(&stop.program);
+    command
+        .args(&stop.args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    for (key, value) in &stop.env {
+        command.env(key, value);
+    }
+    let status = command.status().map_err(|e| {
+        IpcError::detailed(
+            code::LAUNCH_FAILED,
+            "ReaPlay could not run the shutdown command for that game.",
+            e.to_string(),
+        )
+    })?;
+    // A non-zero exit is not treated as a failure. `wineserver -k` exits 1
+    // when no server is running, which is the ordinary case when the game had
+    // already stopped — there was simply nothing left to kill. Being unable to
+    // *run* the command at all is the real failure, and that is handled above.
+    if !status.success() {
+        log::debug!(
+            "{} exited with {status}; nothing left to stop",
+            stop.program.display()
+        );
+    }
+    Ok(())
 }
 
 /// Start a process. The child is returned unregistered; callers that want it
@@ -191,6 +255,7 @@ pub fn start_tracked<F>(
     program: &Path,
     args: &[String],
     cwd: Option<&Path>,
+    stop: Option<StopCommand>,
     on_finish: F,
 ) -> Result<(), IpcError>
 where
@@ -199,7 +264,7 @@ where
     let mut child = spawn_process(program, args, cwd)?;
     let stdout = drain(child.stdout.take());
     let stderr = drain(child.stderr.take());
-    registry.insert(id.clone(), child)?;
+    registry.insert(id.clone(), child, stop)?;
 
     std::thread::spawn(move || {
         // Poll rather than block on `wait`, so the registry lock stays free
@@ -208,7 +273,7 @@ where
             let finished = {
                 match registry.lock() {
                     Ok(mut map) => match map.get_mut(&id) {
-                        Some(child) => child.try_wait().ok().flatten(),
+                        Some(tracked) => tracked.child.try_wait().ok().flatten(),
                         // Removed from under us: nothing left to wait for.
                         None => break None,
                     },
@@ -365,6 +430,8 @@ mod tests {
             Path::new("/bin/echo"),
             &["tracked".to_string()],
             None,
+            // The spawned process is the process: no shutdown command needed.
+            None,
             move |outcome| tx.send(outcome).expect("send outcome"),
         )
         .expect("start");
@@ -387,6 +454,8 @@ mod tests {
             "launch-2".into(),
             Path::new("/bin/sleep"),
             &["30".to_string()],
+            None,
+            // The spawned process is the process: no shutdown command needed.
             None,
             move |outcome| tx.send(outcome).expect("send outcome"),
         )

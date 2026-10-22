@@ -27,7 +27,8 @@ that drive the real command logic against temporary files.
 
 ## Phase 2 — Provider abstraction
 
-- [x] Provider interface and capability model (`src-tauri/src/provider.rs`)
+- [x] Provider interface and capability model (`src-tauri/src/provider.rs`) —
+      two providers now: `CrossOverProvider` and `WineProvider`
 - [x] Detect supported compatibility tools without changing the host system —
       Rosetta 2, Wine, CrossOver and Game Porting Toolkit, by file checks only;
       no third-party binary is executed to interrogate it
@@ -35,9 +36,16 @@ that drive the real command logic against temporary files.
 - [x] Validate provider configuration before launch — a launch resolves a
       provider and re-checks the game's files before any process is spawned
 
-Only one provider (Wine) is implemented. **No Wine runtime is installed on this
-machine**, so the provider reports itself unavailable and launching is refused
-with `PROVIDER_UNAVAILABLE` rather than failing obscurely.
+CrossOver 26.3 is installed on this machine (signed by CodeWeavers, notarized,
+accepted by Gatekeeper — no quarantine stripping or re-signing was needed), with
+a `win10_64` bottle named `ReaPlay`.
+
+CrossOver is **not** stock Wine and must not be driven as if it were. Its `wine`
+is a Perl wrapper that needs `--bottle`, and `--cx-app` resolves against the
+bottle's drive mappings rather than the native filesystem, so the executable is
+passed as the final bare argument instead. `find_wine_runtime` therefore no
+longer reports CrossOver, which would otherwise have produced a command that
+could not run.
 
 ## Phase 3 — Launch and observability
 
@@ -56,11 +64,25 @@ left `running` by a crash as stopped rather than showing it as live.
 
 The pipeline is verified against real processes (`/bin/echo`, `/bin/sleep`),
 including spawn, argument handling, exit codes, output capture and termination.
-It has **not** been verified against a real Windows game, because no
-compatibility runtime is installed.
+
+It is now also verified against **real Windows binaries**, by two tests marked
+`#[ignore]` because they need CrossOver installed, which CI does not have. Run
+them with `cargo test --lib -- --ignored --nocapture`:
+
+- `a_real_windows_executable_runs_through_crossover` launches the bottle's own
+  `cmd.exe` and asserts the captured stdout contains the Windows banner — proof
+  that Windows code ran, not merely that a process started.
+- `a_real_windows_game_launches_and_can_be_stopped` launches Anarch, asserts it
+  is tracked as running, terminates it, and asserts the recorded outcome is
+  `Terminated` rather than a clean `Exited`.
 
 ## Phase 4 — Compatibility verification
 
+- [x] First real Windows game launched end to end — Anarch 1.01 (public domain)
+      runs through ReaPlay on macOS 26.6.2 / aarch64 via CrossOver 26.3, and is
+      tracked and terminable from the app
+- [x] Verify graphics, input, audio, exit behaviour, logs and resource usage —
+      all six confirmed for Anarch; see `docs/FIRST_GAME.md`
 - [ ] Test on supported macOS and Apple Silicon configurations
 - [ ] Publish reproducible results per game and provider version
 - [ ] Document unsupported features and known issues

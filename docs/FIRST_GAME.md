@@ -80,3 +80,103 @@ that automatically, with home paths redacted.
   whole Windows gaming stack. Its claims come from its own marketing and it
   would install the proprietary components on your behalf — the opposite of
   the explicit, user-consented setup this project calls for.
+
+## Result: Anarch ran, 2026-10-22
+
+Anarch 1.01 is the first Windows game ReaPlay has launched end to end.
+
+| | |
+|---|---|
+| Source | `bin/Anarch_winshitxp_sdl_1-01.zip` in the author's own repo, <https://gitlab.com/drummyfish/anarch> |
+| sha256 (zip) | `b8d109102e7cd012f34ba59ef4a89f07e6db9e5edfe9ed476b63158b19141a67` |
+| Licence | Unlicense (code), CC0 (assets) — public domain, so nothing is redistributed under restriction |
+| Binary | `PE32 executable (console) Intel 80386` — **32-bit x86** |
+| Runtime | CrossOver 26.3, bottle `ReaPlay` (`win10_64`) |
+| Host | macOS 26.6.2, aarch64 |
+
+It rendered its title screen and menu, and was tracked and terminated from
+ReaPlay. The prediction in this document held: no DirectX, no D3DMetal and no
+Game Porting Toolkit were needed. Plain Wine-via-CrossOver was enough.
+
+### Two things worth knowing
+
+**The game is 32-bit.** That was not planned, and it turned out to be a
+stronger test than a 64-bit binary: it exercises CrossOver's 32-bit support on
+Apple Silicon, which is the part most likely to disappear. macOS raised a
+CrossOver notice during the run — *"This version of CrossOver includes a
+component that will not work with a future release of macOS"* — which refers to
+exactly that. A 64-bit game should be the next rung, so the first failure of
+the 32-bit path does not read as a ReaPlay regression.
+
+**"MALWARE OS DETECTED" is not an error.** Anarch prints it on purpose when it
+believes it is running on Windows. It is the author's joke, not a diagnostic.
+
+### Command ReaPlay builds
+
+```
+/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine
+  --bottle ReaPlay
+  --no-gui          # errors go to the launch log, not a modal nobody dismisses
+  --wait            # so the recorded exit code is the game's
+  <native path to the .exe>
+```
+
+Still an argument array, never a shell string.
+
+## Phase 5 verification, 2026-10-22
+
+| Aspect | Result |
+|---|---|
+| Graphics | Title screen and menu render correctly |
+| Input | Confirmed by playing it |
+| Audio | Confirmed working |
+| Exit behaviour | Clean exit records `Exited`; a stop records `Terminated` |
+| Logs | Program, argument array, exit code and captured output recorded |
+| Resource usage | ~25–35% of one core, 239 MB RSS, 18 threads (measured on the game process) |
+
+Total footprint including CrossOver's helpers (`wineserver`, two `winedevice`,
+the wrapper) was about 545 MB across 6 processes.
+
+### A bug this found: terminate did not stop the game
+
+Measuring resource usage exposed a real defect, because it forced the question
+*which* process is the game. It is not the one ReaPlay spawns.
+
+```
+44633  wine (Perl wrapper)      <- what ReaPlay spawned and tracked
+44634  winewrapper.exe          ppid 44633
+44658  Y:\...\Anarch...exe      ppid 1, pgid 44658   <- the actual game
+```
+
+Wine reparents the game to init **and** puts it in its own process group, so
+neither killing the spawned child nor killing its process group reaches it.
+Killing the wrapper was verified to leave the game running at 19% CPU with its
+window still on screen, while ReaPlay recorded `Terminated`. The app was
+reporting something that had not happened.
+
+The fix is `StopCommand`, a shutdown command the provider supplies and the
+registry runs after killing the child. CrossOver supplies `wineserver -k`
+scoped to the bottle by `WINEPREFIX`.
+
+Two consequences worth stating plainly:
+
+- **Shutdown is bottle-wide.** Stopping one game stops everything else in that
+  bottle. One bottle per game makes it exact, which is what per-game profiles
+  are for. The fix is narrower scope, not a wider kill.
+- **A non-zero `wineserver -k` is not a failure.** It exits 1 when no server is
+  running, which means there was nothing left to stop.
+
+### Why the first version of the test did not catch it
+
+The test asserted the *record* said `Terminated`. That was true, and useless.
+It now asserts the game process is actually gone, and it was verified to fail
+when the shutdown command is removed, so it tests the fix rather than
+decorating it.
+
+Two further traps, both of which produced a passing test that proved nothing:
+
+- Searching for the bare file name matched the `wine` wrapper, whose arguments
+  contain the game's native path, so the test "found the game" before the game
+  existed. It now matches the Windows path separator (`\game.exe`).
+- A stray game from a previous run satisfied every assertion. The test now
+  refuses to start if one is already running.

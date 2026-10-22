@@ -346,6 +346,7 @@ where
         &program,
         &args,
         working_directory.as_deref(),
+        chosen.stop_command(),
         move |outcome| {
             let mut finished = pending;
             finished.status = outcome.status;
@@ -416,6 +417,20 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
+    /// The end-to-end tests share one CrossOver bottle, and stopping a game
+    /// stops everything in that bottle, so two of them running at once would
+    /// kill each other's processes. Cargo runs tests in parallel by default,
+    /// so they take this lock rather than relying on `--test-threads=1`.
+    static BOTTLE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Take the bottle lock, ignoring poisoning: a panic in one end-to-end
+    /// test should not cascade into "every other test failed too".
+    fn bottle_lock() -> std::sync::MutexGuard<'static, ()> {
+        BOTTLE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     /// A real `AppState` backed by temporary files: these tests exercise the
     /// same code paths the Tauri commands call, without a Tauri runtime.
     fn test_state() -> (AppState, PathBuf) {
@@ -444,6 +459,200 @@ mod tests {
             },
             state,
         )
+    }
+
+    /// End-to-end against the real CrossOver installed on this machine:
+    /// import a genuine Windows executable and launch it through exactly the
+    /// code path the UI calls.
+    ///
+    /// `cmd.exe` with no arguments exits as soon as it reads EOF, and the
+    /// launcher gives every process a null stdin, so it terminates by itself.
+    ///
+    /// Ignored by default: it needs CrossOver and a bottle, which CI does not
+    /// have. Run it with `cargo test --lib -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "requires an installed CrossOver with a bottle"]
+    fn a_real_windows_executable_runs_through_crossover() {
+        let _guard = bottle_lock();
+        let bottles = crate::diagnostics::crossover_bottles();
+        let Some(bottle) = bottles.first() else {
+            panic!("no CrossOver bottle found; create one before running this");
+        };
+        let cmd_exe = PathBuf::from(std::env::var_os("HOME").expect("HOME"))
+            .join("Library/Application Support/CrossOver/Bottles")
+            .join(bottle)
+            .join("drive_c/windows/system32/cmd.exe");
+        assert!(cmd_exe.is_file(), "no cmd.exe at {}", cmd_exe.display());
+
+        let (state, _dir) = test_state();
+        let imported = import(
+            &state,
+            &cmd_exe.display().to_string(),
+            Some("Windows Command Prompt"),
+        )
+        .expect("import a real Windows executable");
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let started = launch_game_inner(imported.game.id.clone(), &state, move |finished| {
+            let _ = tx.send(finished);
+        })
+        .expect("launch should start");
+        assert_eq!(started.status, LaunchStatus::Running);
+        assert_eq!(started.provider_id, "crossover");
+
+        let finished = rx
+            .recv_timeout(std::time::Duration::from_secs(180))
+            .expect("the launch should finish");
+
+        println!("program : {}", finished.program);
+        println!("args    : {:?}", finished.args);
+        println!("status  : {:?}", finished.status);
+        println!("exit    : {:?}", finished.exit_code);
+        println!(
+            "stdout  : {}",
+            finished.stdout_tail.as_deref().unwrap_or("")
+        );
+        println!(
+            "stderr  : {}",
+            finished.stderr_tail.as_deref().unwrap_or("")
+        );
+
+        assert_eq!(
+            finished.status,
+            LaunchStatus::Exited,
+            "{:?}",
+            finished.error
+        );
+        assert_eq!(finished.exit_code, Some(0));
+        // Proof that real Windows code ran, not merely that a process started.
+        assert!(
+            finished
+                .stdout_tail
+                .as_deref()
+                .unwrap_or("")
+                .contains("Microsoft Windows"),
+            "cmd.exe banner missing from captured stdout"
+        );
+
+        // The history must record the finished launch, not the running one.
+        let history = list_launches_inner(&state).expect("history");
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].status, LaunchStatus::Exited);
+    }
+
+    /// The whole point of the project, end to end: import a real Windows game
+    /// and run it through ReaPlay's own launch pipeline.
+    ///
+    /// A game does not exit on its own, so this also exercises the part that
+    /// matters in practice — tracking a running process and terminating it.
+    ///
+    /// Ignored by default: it needs CrossOver, a bottle, and Anarch present.
+    /// Run it with `cargo test --lib -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "requires CrossOver and a local copy of Anarch"]
+    fn a_real_windows_game_launches_and_can_be_stopped() {
+        let _guard = bottle_lock();
+        let game_exe = PathBuf::from(
+            "/Users/gulsher/Desktop/lets-talk/games/anarch/Anarch_winshitxp_sdl_1-1.exe",
+        );
+        if !game_exe.is_file() {
+            panic!("Anarch is not at {}", game_exe.display());
+        }
+
+        // A leftover game from an earlier run would satisfy every assertion
+        // below without this run proving anything, so refuse to start dirty.
+        assert!(
+            !a_windows_process_is_running("Anarch_winshitxp_sdl_1-1.exe"),
+            "an earlier Anarch is still running; stop it before running this"
+        );
+
+        let (state, _dir) = test_state();
+        let imported = import(&state, &game_exe.display().to_string(), Some("Anarch"))
+            .expect("import the game");
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let started = launch_game_inner(imported.game.id.clone(), &state, move |finished| {
+            let _ = tx.send(finished);
+        })
+        .expect("launch should start");
+
+        println!("program : {}", started.program);
+        println!("args    : {:?}", started.args);
+        assert_eq!(started.provider_id, "crossover");
+        assert_eq!(started.status, LaunchStatus::Running);
+
+        // While it runs, the library view must show it as running.
+        let during = list_launches_inner(&state).expect("history during");
+        assert_eq!(during[0].status, LaunchStatus::Running);
+
+        // Let the game actually start before stopping it. Terminating in the
+        // first milliseconds would test a race, not the real behaviour: a user
+        // pressing Stop does it to a game that is up and running.
+        let appeared = (0..100).any(|_| {
+            if a_windows_process_is_running("Anarch_winshitxp_sdl_1-1.exe") {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            false
+        });
+        assert!(appeared, "the game never started");
+
+        // Exactly what the `terminate_launch` command does.
+        state
+            .registry
+            .terminate(&started.id)
+            .expect("terminate the game");
+
+        let finished = rx
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .expect("terminating should produce an outcome");
+        println!("status  : {:?}", finished.status);
+        println!("exit    : {:?}", finished.exit_code);
+        println!(
+            "stdout  : {}",
+            finished.stdout_tail.as_deref().unwrap_or("")
+        );
+        println!(
+            "stderr  : {}",
+            finished.stderr_tail.as_deref().unwrap_or("")
+        );
+
+        // Terminated, not "exited cleanly": the distinction is the point.
+        assert_ne!(finished.status, LaunchStatus::Running);
+        let after = list_launches_inner(&state).expect("history after");
+        assert_eq!(after.len(), 1);
+        assert_ne!(after[0].status, LaunchStatus::Running);
+
+        // The assertion that actually matters, and the one whose absence hid a
+        // real bug: the *game* must be gone, not merely the process ReaPlay
+        // spawned. Wine reparents the game to init, so an earlier version of
+        // this code reported a clean stop while the game kept running.
+        assert!(
+            !a_windows_process_is_running("Anarch_winshitxp_sdl_1-1.exe"),
+            "ReaPlay reported the game stopped, but it is still running"
+        );
+    }
+
+    /// Whether the *game* is running, as opposed to the launcher that starts
+    /// it.
+    ///
+    /// This matches on the Windows path separator, which matters: the `wine`
+    /// wrapper ReaPlay spawns carries the game's **native** path in its own
+    /// arguments (`/Users/.../game.exe`), so a search for the bare file name
+    /// matches the wrapper the instant it starts, before the game exists. The
+    /// Wine-side process is the one whose command line is a Windows path
+    /// (`Y:\...\game.exe`), so requiring a preceding backslash finds the game
+    /// and nothing else.
+    #[cfg(test)]
+    fn a_windows_process_is_running(exe_name: &str) -> bool {
+        let pattern = format!(r"\\{exe_name}");
+        let output = std::process::Command::new("/usr/bin/pgrep")
+            .args(["-f", &pattern])
+            .output()
+            .expect("pgrep should run");
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .any(|line| !line.trim().is_empty())
     }
 
     #[test]
